@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 
 
-class MlpPolicy(nn.Module):
+class MlpDQN(nn.Module):
     def __init__(self, action_size, input_size):
-        super(MlpPolicy, self).__init__()
+        super(MlpDQN, self).__init__()
         self.action_size = action_size
         self.input_size = input_size
         self.fc1 = nn.Linear(self.input_size, 24)
