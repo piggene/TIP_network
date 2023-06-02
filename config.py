@@ -1,4 +1,11 @@
 class AgentConfig:
+    
+    #Latent Vector z's length
+    latent_length = 20
+    #Length of memory buffer tau
+    tau_length = 50
+    alpha = 0.02
+
     # Learning
     gamma = 0.99
     train_freq = 1
@@ -28,5 +35,5 @@ class AgentConfig:
 
 
 class EnvConfig:
-    env_name = 'CartPole-v0'
+    env_list = ['CartPole-v0','CartPole-v0','Cartpole-v0','Cartpole-v0','Cartpole-v0']
     save_every = 10000
