@@ -1,7 +1,7 @@
 class AgentConfig:
     
     #Latent Vector z's length
-    latent_size = 128
+    latent_size = 1#128
     #Length of memory buffer tau
     tau_max_length = 5000000000000000000
     alpha = 0.02 # for controlling z incrementally
@@ -23,7 +23,7 @@ class AgentConfig:
     batch_size_seq = 16
 
     epsilon_minimum = 0.05
-    epsilon_decay_rate = 0.9999
+    epsilon_decay_rate = 0.9995
     learning_rate_dqn = 0.001
     learning_rate_pred = 0.001
     learning_rate_encd = 0.001
@@ -42,4 +42,4 @@ class AgentConfig:
 
 
 class EnvConfig:
-    env_list = ['Assault-ram-v4','BeamRider-ram-v4','AirRaid-ram-v4','Enduro-ram-v4','Skiing-ram-v4']
+    env_list = ['Assault-ram-v4']#,'BeamRider-ram-v4','AirRaid-ram-v4','Enduro-ram-v4','Skiing-ram-v4']

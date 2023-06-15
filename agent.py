@@ -15,7 +15,7 @@ from network import MlpDQN, ModelPredictor, Encoder_rnn, Decoder_rnn, Seq2Seq
 from ops import *
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+print(torch.cuda.is_available())
 
 class Agent(AgentConfig, EnvConfig):
     def __init__(self):
@@ -31,7 +31,7 @@ class Agent(AgentConfig, EnvConfig):
         for i in range(len(self.env_list)):
             self.env.append(gym.make(self.env_list[i],full_action_space=True))
             self.tau.append([])
-            obs = self.env[i].reset()
+            obs, _ = self.env[i].reset()
             self.state.append(obs)
             self.z.append(torch.zeros(self.latent_size, device=device))
             self.max_reward.append(0)
@@ -89,20 +89,18 @@ class Agent(AgentConfig, EnvConfig):
             #self.alpha_decay()
             self.z[i]= z_hat
             current_state = self.state[i]
-            input_policy = torch.cat([torch.FloatTensor(current_state),self.z[i]]).to(device)
+            current_state_torch = torch.tensor(current_state , device = device, dtype = torch.float)
+            input_policy = torch.cat([current_state_torch,self.z[i]]).to(device)
 
             action = random.randrange(self.action_size) if np.random.rand() < self.epsilon[i] else \
                     torch.argmax(self.dqn_network(input_policy)).item()
-            next_state, reward, terminal, info = self.env[i].step(action)
+            next_state, reward, terminal, _, _ = self.env[i].step(action)
             if len(self.tau[i])!=0:
-                self.memory_buffer.add(current_state, reward, action, terminal, next_state, self.tau[i][-1], self.z[i], i)
-            if not terminal:
-                self.state[i] = next_state
-                self.reward_episode[i] = self.reward_episode[i]*self.gamma + reward 
-            if terminal:
-                self.state[i] = self.env[i].reset()
-                self.reward_episode[i] = 0
-
+                self.memory_buffer.add(current_state, reward, action, terminal, next_state, self.tau[i][-1], self.z[i].cpu(), i)
+            
+            self.state[i] = next_state
+            self.reward_episode[i] = self.reward_episode[i]*self.gamma + reward 
+            
             if self.reward_episode[i] > self.max_reward[i]:
                 self.max_reward[i] = self.reward_episode[i]
 
@@ -110,8 +108,9 @@ class Agent(AgentConfig, EnvConfig):
                 self.tau[i].remove(0)
             action_onehot = torch.zeros(self.action_size).to(device)
             action_onehot[action] = 1    
-            new_tau = torch.cat([torch.FloatTensor(next_state), torch.FloatTensor(action_onehot)]).to(device)
-            new_tau = torch.cat([new_tau, torch.FloatTensor([reward, terminal])]).to(device)
+            next_state_torch = torch.tensor(next_state, device = device, dtype = torch.float)
+            new_tau = torch.cat([next_state_torch, action_onehot]).to(device)
+            new_tau = torch.cat([new_tau, torch.FloatTensor([reward, terminal]).to(device)])
             self.tau[i].append(new_tau)
 
 
@@ -131,6 +130,10 @@ class Agent(AgentConfig, EnvConfig):
             plotlist.append(self.max_reward)            
             self.epsilon_decay(i)
             step += 1
+            if terminal:
+                self.state[i], _ = self.env[i].reset()
+                self.reward_episode[i] = 0
+
 
 
         for env in self.env_list:
@@ -147,7 +150,7 @@ class Agent(AgentConfig, EnvConfig):
         q_val_batch = torch.FloatTensor().to(device)
         for i in range(self.batch_size_rl):
             if terminal_batch[i]:
-                y_batch= torch.cat([y_batch,torch.FloatTensor([reward_batch[i]])])
+                y_batch= torch.cat([y_batch,torch.FloatTensor([reward_batch[i]]).to(device)])
             else:
                 j=0
                 state_next = next_state_batch[i]
@@ -158,9 +161,10 @@ class Agent(AgentConfig, EnvConfig):
                     action_idx = random.randrange(self.action_size) if np.random.rand() < self.epsilon[int(task_batch[i].item())] else \
                         torch.argmax(self.dqn_network(input_policy)).item() 
                     action_next = torch.zeros(self.action_size).to(device)
-                    action_next[action_idx] = 1              
+                    action_next[action_idx] = 1
+                    state_next_torch = torch.tensor(state_next, device= device, dtype = torch.float)              
                     estimate = self.predictor_network.forward(torch.cat([\
-                    torch.FloatTensor(state_next),action_next,torch.FloatTensor(z_batch[i])]))
+                    state_next_torch,action_next,torch.FloatTensor(z_batch[i]).to(device)]))
                     state_next_next = estimate[0:self.obs_size]
                     reward_next = estimate[-2]
                     terminal_next = estimate[-1]
@@ -174,10 +178,11 @@ class Agent(AgentConfig, EnvConfig):
                     input_policy = torch.cat([torch.FloatTensor(state_next),torch.FloatTensor(z_batch[i])]).to(device)
                     y += one*self.gamma*torch.max(self.dqn_network(input_policy).to(device),dim=1)[0]
                 y_batch = torch.cat([y_batch, y.reshape(1)])
-            action_next = torch.zeros(self.action_size)
+            action_next = torch.zeros(self.action_size).to(device)
             action_next[int(action_batch[i].item())] = 1
-            pred_batch = torch.cat([pred_batch,self.predictor_network.forward(torch.cat([torch.FloatTensor(state_batch[i]), action_next, torch.FloatTensor(z_batch[i])]))],0) 
-            real_batch = torch.cat([real_batch,torch.cat([torch.FloatTensor(next_state_batch[i]),torch.FloatTensor([reward_batch[i],terminal_batch[i]])])])
+            pred_batch = torch.cat([pred_batch,self.predictor_network.forward(torch.cat([torch.FloatTensor(state_batch[i]).to(device), \
+            action_next, torch.FloatTensor(z_batch[i]).to(device)]))],0) 
+            real_batch = torch.cat([real_batch,torch.cat([torch.FloatTensor(next_state_batch[i]).to(device),torch.FloatTensor([reward_batch[i],terminal_batch[i]]).to(device)])])
             input_policy = torch.cat([torch.FloatTensor(state_batch[i]),torch.FloatTensor(z_batch[i])]).to(device)
             q_val_batch = torch.cat([q_val_batch,self.dqn_network(input_policy).to(device)[int(action_batch[i].item())].reshape(1)]) 
 
