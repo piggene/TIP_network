@@ -7,9 +7,12 @@ class MlpDQN(nn.Module):
         super(MlpDQN, self).__init__()
         self.action_size = action_size
         self.input_size = input_size
-        self.fc1 = nn.Linear(self.input_size, 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, self.action_size)
+        # self.fc1 = nn.Linear(self.input_size, 256)
+        # self.fc2 = nn.Linear(256, 256)
+        # self.fc3 = nn.Linear(256, self.action_size)
+        self.fc1 = nn.Linear(self.input_size, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, self.action_size)       
         self.tanh = nn.Tanh()
         self.relu = nn.ReLU()
         
@@ -29,9 +32,9 @@ class ModelPredictor(nn.Module):
         super(ModelPredictor, self).__init__()
         self.output_size = output_size
         self.input_size = input_size
-        self.fc1 = nn.Linear(self.input_size, 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, self.output_size)
+        self.fc1 = nn.Linear(self.input_size, 128)
+        self.fc2 = nn.Linear(128, 128)
+        self.fc3 = nn.Linear(128, self.output_size)
         self.tanh = nn.Tanh()
         self.relu = nn.ReLU()
 

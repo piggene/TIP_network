@@ -41,7 +41,7 @@ class Agent(AgentConfig, EnvConfig):
             self.max_reward.append(0)
             self.reward_episode.append(0)
             self.epsilon.append(1)
-            self.alpha.append(1)
+            self.alpha.append(0.0001)
             self.reward_term_epi.append(0)
         
         self.action_size = self.env[i].action_space.n  
@@ -61,9 +61,9 @@ class Agent(AgentConfig, EnvConfig):
         self.seq2seq = Seq2Seq(self.enc, self.dec, device).to(device)
 
         ##modify weight decay TODO
-        self.optimizer_dqn = optim.Adam(self.dqn_network.parameters(), lr=self.learning_rate_dqn, weight_decay = self.weight_decay_dqn)
-        self.optimizer_pred = optim.Adam(self.predictor_network.parameters(), lr=self.learning_rate_pred, weight_decay = self.weight_decay_pred)
-        self.optimizer_encoder = optim.Adam(self.seq2seq.parameters(), lr=self.learning_rate_encd, weight_decay = self.weight_decay_encd)
+        self.optimizer_dqn = optim.Adam(self.dqn_network.parameters(), lr=self.learning_rate_dqn)#, weight_decay = self.weight_decay_dqn)
+        self.optimizer_pred = optim.Adam(self.predictor_network.parameters(), lr=self.learning_rate_pred)#, weight_decay = self.weight_decay_pred)
+        self.optimizer_encoder = optim.Adam(self.seq2seq.parameters(), lr=self.learning_rate_encd)#, weight_decay = self.weight_decay_encd)
         
         #modify loss & criterion
         self.loss_dqn = 0
@@ -78,6 +78,7 @@ class Agent(AgentConfig, EnvConfig):
         plotlist = []
         # A new episode
         while step < self.max_step:
+            # i be the name of the task
             i = random.randrange(len(self.env_list))
 
 
@@ -91,12 +92,12 @@ class Agent(AgentConfig, EnvConfig):
                     input_tau[j][:] = self.tau[i][j]
                 z_hat = self.seq2seq.encoder(input_tau.unsqueeze(1)).squeeze(0).squeeze(0)
 
-            self.z[i] = torch.zeros_like(z_hat)
-
-            # self.z[i] = self.z[i]*(1-self.alpha[i])+self.alpha[i]*z_hat
-            # self.alpha_decay(i)
+            self.z[i] = self.z[i]*(1-self.alpha[i])+self.alpha[i]*z_hat
+            self.alpha_decay(i)
             
-            # self.z[i]= z_hat
+            self.z[i]= z_hat
+            # self.z[i] = torch.zeros_like(z_hat)
+
             current_state = self.state[i]
             current_state_torch = torch.tensor(current_state , device = device, dtype = torch.float)
             input_policy = torch.cat([current_state_torch,self.z[i]]).to(device)
@@ -104,6 +105,7 @@ class Agent(AgentConfig, EnvConfig):
             action = random.randrange(self.action_size) if np.random.rand() < self.epsilon[i] else \
                     torch.argmax(self.dqn_network(input_policy)).item() 
             # print("state and task", i, current_state)
+            print(action)
             next_state, reward, terminal, _, _ = self.env[i].step(action)
             
             if terminal:
@@ -147,7 +149,7 @@ class Agent(AgentConfig, EnvConfig):
             if terminal:
                 print("current step: ", step)
                 for i in range(len(self.env_list)):
-                    print(self.env_list[i] + " max reward: ", self.max_reward[i], "epi reward", self.reward_term_epi[i], "Epsillon ", self.epsilon[i], "z ", self.z[i]) 
+                    print("Task" + str(i) + " max reward: ", self.max_reward[i], "epi reward", self.reward_episode[i], "Epsillon ", self.epsilon[i], "z ", self.z[i]) 
                 print("==================================================================")
                 self.state[i], _ = self.env[i].reset()
                 self.reward_term_epi[i] = self.reward_episode[i]
@@ -163,8 +165,8 @@ class Agent(AgentConfig, EnvConfig):
 
 
 
-        for env in self.env_list:
-            self.env.close()
+        # for env in self.env_list:
+        #     self.env.close()
 
         #self.plot_graph(plotlist)
 
@@ -186,7 +188,7 @@ class Agent(AgentConfig, EnvConfig):
                 while (j<self.TD_step):
                     input_policy = torch.cat([torch.FloatTensor(state_next),torch.FloatTensor(z_batch[i])]).to(device)
                     action_idx = random.randrange(self.action_size) if np.random.rand() < self.epsilon[int(task_batch[i].item())] else \
-                        torch.argmax(self.dqn_network(input_policy)).item() 
+                        torch.argmax(self.dqn_network_target(input_policy)).item() 
                     action_next = torch.zeros(self.action_size).to(device)
                     action_next[action_idx] = 1
                     state_next_torch = torch.tensor(state_next, device= device, dtype = torch.float)              
@@ -205,18 +207,16 @@ class Agent(AgentConfig, EnvConfig):
                     input_policy = torch.cat([torch.FloatTensor(state_next),torch.FloatTensor(z_batch[i])]).to(device)
                     y += one*self.gamma*torch.max(self.dqn_network(input_policy).to(device))
                 y_batch = torch.cat([y_batch, y.reshape(1)])
-            
             else :
                 input_policy = torch.cat([torch.FloatTensor(next_state_batch[i]),torch.FloatTensor(z_batch[i])]).to(device)
-                y = reward_batch[i]
-                y += self.gamma*torch.max(self.dqn_network(input_policy).to(device))
+                y = reward_batch[i] + self.gamma*torch.max(self.dqn_network_target(input_policy).to(device))
                 y_batch = torch.cat([y_batch, y.reshape(1)])
             
             input_policy = torch.cat([torch.FloatTensor(state_batch[i]),torch.FloatTensor(z_batch[i])]).to(device)
-            # q_val_batch = torch.cat([q_val_batch,self.dqn_network_target(input_policy).to(device)[int(action_batch[i].item())].reshape(1)])
-            q_val_batch = torch.cat([q_val_batch,torch.max(self.dqn_network_target(input_policy).to(device)).reshape(1)])
+            q_val_batch = torch.cat([q_val_batch,self.dqn_network(input_policy).to(device)[int(action_batch[i].item())].reshape(1)])
+            
 
-        self.loss_dqn = self.criterion_dqn(q_val_batch, y_batch) 
+        self.loss_dqn = self.criterion_dqn(q_val_batch, y_batch).mean()
         # print('action')
         # print(action_batch)
         # print('state')
