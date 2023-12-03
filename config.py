@@ -1,52 +1,29 @@
 class AgentConfig:
     
     #Latent Vector z's length
-    latent_size = 16 #128
+    latent_size = 12#128
+    task_vec_size = 13
     #Length of memory buffer tau
-    tau_max_length = 200
-    pred_weight = .5
-    td_weight = .5
+    tau_max_length = 50
+    tau_save_freq = 25
 
-    TD_step = 3
+    learning_start_rl = 1000
+    learning_freq_rl = 30
 
-    learning_start_dqn = 100
-    learning_freq_dqn = 30
-    learning_start_encd = 20
-    learning_freq_encd = 10
-    learning_freq_pred = 10
-    learning_start_pred = 100
 
 
     # Learning
-    gamma = 1 #0.99
-    memory_size = 2002
-    batch_size_rl_dqn = 32
-    batch_size_rl_pred = 16
-    batch_size_seq = 16
+    gamma = 0.99
+    memory_size = 3000
+    batch_size_rl = 32
 
-    epsilon_minimum = 0.02 #0.0005
-    epsilon_decay_rate = 0.99993
-    
-    weight_decay_dqn = 0.999
-    weight_decay_encd = 0.999
-    weight_decay_pred = 0.999
-    
-    alpha_minimum = 0.0001
-    alpha_decay_rate = 0.9995
-    
-    learning_rate_dqn = 0.0005
-    learning_rate_pred = 0.0005
-    learning_rate_encd = 0.0005
-    
-    target_update_freq = 200
 
-    max_step = 4000000      # 40M steps max
+    epsilon_minimum = 0.01
+    epsilon_decay_rate = 0.9995
+    learning_rate_dqn = 0.001
+    learning_rate_embd = 0.001
 
-    # RNN
-    n_layers =  1 #Dont Change!! Fuck U
-    enc_dropout = 0
-    dec_dropout = 0
-    teacher_forcing_ratio = 0.5
+    max_step = 4000000    # 40M steps max
 
 
     #Progress 
@@ -54,6 +31,5 @@ class AgentConfig:
 
 
 class EnvConfig:
-    # env_list = ['CartPole-v0']
-    env_list = ['CartPoleStay-v0', 'CartPoleStay-v0', 'CartPoleStay-v0', 'CartPoleStay-v0', 'CartPoleStay-v0', 'CartPoleStay-v0']
-    # env_list = ['Assault-ram-v4','BeamRider-ram-v4','AirRaid-ram-v4','Enduro-ram-v4','Skiing-ram-v4']
+    env_name = 'DFTPole'#,'BeamRider-ram-v4','AirRaid-ram-v4','Enduro-ram-v4','Skiing-ram-v4']
+    env_num = 40
