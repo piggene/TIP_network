@@ -13,6 +13,7 @@ from config import AgentConfig, EnvConfig
 from memory import ReplayMemory
 from network import MlpDQN, MlpEmbed
 from ops import *
+from torch.utils.data import Dataset, DataLoader
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(torch.cuda.is_available())
@@ -75,6 +76,8 @@ class Agent(AgentConfig, EnvConfig):
         #self.adaptor_network = TODO
         self.optimizer_dqn = optim.Adam(self.dqn_network.parameters(), lr=self.learning_rate_dqn)
         self.optimizer_embed = optim.Adam(self.embedding_network.parameters(), lr=self.learning_rate_embd)
+        self.criterion_adaptor = nn.MSELoss() 
+        self.optimizer_adaptor = optim.Adam(self.adaptor_network.parameters(), lr=self.learning_rate_adaptor) 
 
         #modify loss & criterion
         self.loss_rl = 0
@@ -83,6 +86,19 @@ class Agent(AgentConfig, EnvConfig):
     def train(self):
         # if mode == 0 execute dqn learning stage
         if self.mode == 0:
+            folder_paths = ['weights','taus']
+            # Check if the folder exists, and if not, create it
+            for folder_path in folder_paths:
+                if not os.path.exists(folder_path):
+                    os.makedirs(folder_path)
+                # Remove all files in the folder
+                for file_name in os.listdir(folder_path):
+                    file_path = os.path.join(folder_path, file_name)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.unlink(file_path)
+                    except Exception as e:
+                        print(f"Error deleting {file_path}: {e}")
             try:
                 prev_step = 0
                 step = 0
@@ -142,28 +158,41 @@ class Agent(AgentConfig, EnvConfig):
 
             except KeyboardInterrupt:
                 print("Training Interrupted. Saving Model weights...")
-                torch.save(self.dqn_network.model.state_dict(), weights)
-                torch.save(self.embedding_network.model.state_dict(), weights)
+                torch.save(self.dqn_network.state_dict(),f"weights/dqn_weight.pt")
+                torch.save(self.embedding_network.state_dict(),f"weights/embedding_weight.pt")
                 for i in range(self.env_num):
                     save_filename = f"taus/taskvec_{i}.pt"
                     torch.save(self.e[i],save_filename)
             
             print("Training finished. Saving final model weights...")
-            torch.save(self.dqn_network.model.state_dict(), weights)
-            torch.save(self.embedding_network.model.state_dict(), weights)
+            torch.save(self.dqn_network.state_dict(),f"weights/dqn_weight.pt")
+            torch.save(self.embedding_network.state_dict(),f"weights/embedding_weight.pt")
             
             for env in self.env:
-                self.env.close()
+                env.close()
 
         else: 
-            #learning CNN based adaptor model
-            '''
-            state_dict = torch.load(weights/)
-            self.adaptor_network.load_state_dict(state_dict)
-            '''
+            self.learn_adaptor()
 
+    class CustomDataset(Dataset):
+        def __init__(self, folder_path, z):
+            self.folder_path = folder_path
+            self.z = z
+            self.file_list = [f for f in os.listdir(folder_path) if f.endswith('.pt')]
 
-        #self.plot_graph(plotlist)
+        def __len__(self):
+            return len(self.file_list)
+
+        def __getitem__(self, idx):
+            file_name = self.file_list[idx]
+            file_path = os.path.join(self.folder_path, file_name)
+
+            tau_ij = torch.load(file_path)
+            class_i = int(file_name.split('_')[1])  # Extract the class from the folder name
+            z_i = self.z[class_i]
+
+            return tau_ij, z_i       
+
 
     def learn_rl(self):
         state_batch, reward_batch, action_batch, terminal_batch, next_state_batch, e_batch, task_batch = self.memory_buffer.sample(self.batch_size_rl)
@@ -197,6 +226,52 @@ class Agent(AgentConfig, EnvConfig):
 
     def plot_graph(self, plotlist):
         return 0
+
+    def learn_adaptor(self) :
+
+        state_dict = torch.load('weights/embedding_weight.pt')
+        self.embedding_network.load_state_dict(state_dict)
+        z = []
+        folder_path = 'taus' 
+        # Iterate over the files in the folder
+        for i in range(self.env_num):  
+            file_path = os.path.join(folder_path, f'taskvec_{i}.pt')
+
+            # Check if the file exists
+            if os.path.exists(file_path):
+                # Load the vector using torch.load
+                e_i = torch.load(file_path)
+                # Append the loaded vector to the list
+                z.append(self.embedding_network(e_i).to(device))
+            else:
+                print(f"File not found: {file_path}")
+        
+        for param in self.embedding_network.parameters():
+            param.requires_grad = False
+
+        dataset = CustomDataset(folder_path, z)
+        batch_size = self.batch_size_adaptor
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True) 
+
+        num_epochs = self.epoch_adaptor  
+
+        for epoch in range(num_epochs):
+            for batch_taus, batch_z in dataloader:
+                self.optimizer_adaptor.zero_grad()
+
+                # Forward pass
+                predicted_z = self.adaptor_network(batch_taus)
+
+                # Compute the loss
+                loss = self.criterion_adaptor(predicted_z, batch_z)
+
+                # Backward pass
+                loss.backward()
+
+                # Update the weights
+                self.optimizer_adaptor.step()
+
+            print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item()}')
 
 
         

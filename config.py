@@ -23,6 +23,11 @@ class AgentConfig:
     learning_rate_dqn = 0.001
     learning_rate_embd = 0.001
 
+
+    learning_rate_adaptor = 0.001
+    epoch_adaptor = 50
+    batch_size_adaptor = 32
+
     max_step = 4000000    # 40M steps max
 
 
