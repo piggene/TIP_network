@@ -4,30 +4,30 @@ import torch
 
 
 class ReplayMemory:
-    def __init__(self, memory_size, action_size, obs_size, latent_size, num_task):
+    def __init__(self, memory_size, action_size, obs_size, taskvec_size, num_task):
         
         self.states = np.zeros(shape=(memory_size, obs_size))
         self.next_states = np.zeros(shape=(memory_size, obs_size))
         self.actions = np.zeros(memory_size)
         self.rewards = np.zeros(memory_size)
         self.terminals = np.zeros(memory_size)
-        self.taus = []
-        for i in range(num_task):
-            self.taus.append([])
-        self.zs = np.zeros(shape=(memory_size,latent_size))
+        # self.taus = []
+        # for i in range(num_task):
+        #     self.taus.append([])
+        self.es = np.zeros(shape=(memory_size,taskvec_size))
         self.tasks = np.zeros(memory_size)
         self.count = 0
         self.current = 0
         self.memory_size = memory_size
 
-    def add(self, state, reward, action, terminal, next_state, tau, z, task):
+    def add(self, state, reward, action, terminal, next_state, e, task):
         self.states[self.current] = state
         self.rewards[self.current] = reward
         self.actions[self.current] = action
         self.terminals[self.current] = terminal
         self.next_states[self.current] = next_state
-        self.taus[task].append(tau) 
-        self.zs[self.current] = z.detach().numpy()
+        # self.taus[task].append(tau) 
+        self.es[self.current] = e.detach().numpy()
         self.tasks[self.current] = task
 
         self.current = (self.current + 1) % self.memory_size
@@ -39,8 +39,8 @@ class ReplayMemory:
         action_batch = []
         terminal_batch = []
         next_state_batch = []
-        tau_batch = []
-        z_batch = []
+        # tau_batch = []
+        e_batch = []
         task_batch = []
 
 
@@ -53,9 +53,9 @@ class ReplayMemory:
             next_state_batch.append(self.next_states[data_index])
 
             
-            tau_batch.append(torch.stack(self.taus[int(self.tasks[data_index])][0:data_index+1]))
+            # tau_batch.append(torch.stack(self.taus[int(self.tasks[data_index])][0:data_index+1]))
             
-            z_batch.append(self.zs[data_index])
+            e_batch.append(self.es[data_index])
             task_batch.append(self.tasks[data_index])
 
-        return state_batch, reward_batch, action_batch, terminal_batch, next_state_batch, tau_batch, z_batch, task_batch
+        return state_batch, reward_batch, action_batch, terminal_batch, next_state_batch, e_batch, task_batch
